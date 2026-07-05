@@ -1,4 +1,4 @@
-name = "packing-helper-ai"
+name = "packing-helper-workers"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"
 
