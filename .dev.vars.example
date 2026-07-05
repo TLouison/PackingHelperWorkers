@@ -1,0 +1,8 @@
+# Copy to `.dev.vars` (gitignored) for `wrangler dev`.
+# In production these are set with `wrangler secret put <NAME>`.
+ANTHROPIC_API_KEY = "sk-ant-..."
+REVENUECAT_SECRET_KEY = "sk_..."
+
+# Optional local overrides of the [vars] in wrangler.toml.
+# Handy for cap testing:
+# MONTHLY_CAP = "2"

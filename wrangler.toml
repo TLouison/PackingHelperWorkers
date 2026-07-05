@@ -1,0 +1,21 @@
+name = "packing-helper-ai"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# Model + policy config. Swapping the model here is the future "intelligence
+# add-on" lever (later: resolve per-user before calling Anthropic).
+[vars]
+MODEL = "claude-haiku-4-5"
+MONTHLY_CAP = "50"
+ENTITLEMENT_ID = "plus"
+
+# Usage metering + short-lived entitlement cache.
+# Create with:  wrangler kv namespace create USAGE_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "USAGE_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (never commit — set with `wrangler secret put <NAME>`):
+#   ANTHROPIC_API_KEY
+#   REVENUECAT_SECRET_KEY
