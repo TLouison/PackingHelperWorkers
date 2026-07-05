@@ -9,6 +9,11 @@ MODEL = "claude-haiku-4-5"
 MONTHLY_CAP = "50"
 ENTITLEMENT_ID = "PackingHelperPlus"
 
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+
 # Usage metering + short-lived entitlement cache.
 # Create with:  wrangler kv namespace create USAGE_KV
 # then paste the returned id below.
