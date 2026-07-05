@@ -7,7 +7,7 @@ compatibility_date = "2026-07-01"
 [vars]
 MODEL = "claude-haiku-4-5"
 MONTHLY_CAP = "50"
-ENTITLEMENT_ID = "plus"
+ENTITLEMENT_ID = "PackingHelperPlus"
 
 # Usage metering + short-lived entitlement cache.
 # Create with:  wrangler kv namespace create USAGE_KV
