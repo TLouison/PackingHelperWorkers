@@ -14,7 +14,7 @@ ENTITLEMENT_ID = "plus"
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "USAGE_KV"
-id = "packing-helper-workers-kv"
+id = "185075e67d4d41c2bd1f19e25590d759"
 
 # Secrets (never commit — set with `wrangler secret put <NAME>`):
 #   ANTHROPIC_API_KEY
