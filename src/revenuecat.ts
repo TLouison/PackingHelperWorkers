@@ -42,10 +42,21 @@ export async function verifySubscriber(
 
   if (!res.ok) {
     // Treat RC outages as "not verified" rather than granting access.
+    console.log("verifySubscriber: RC HTTP", res.status, "for", rcAppUserId);
     return false;
   }
 
   const body = (await res.json()) as RCResponse;
+  // TEMP DIAGNOSTIC — remove once verified. Shows the exact entitlement keys RC
+  // returns vs the ENTITLEMENT_ID we look for.
+  console.log(
+    "verifySubscriber:",
+    rcAppUserId,
+    "looking for",
+    env.ENTITLEMENT_ID,
+    "found keys",
+    JSON.stringify(Object.keys(body.subscriber?.entitlements ?? {})),
+  );
   const ent = body.subscriber?.entitlements?.[env.ENTITLEMENT_ID];
   if (!ent) return false;
 
