@@ -10,6 +10,7 @@ export interface Env {
   // secrets (wrangler secret put)
   ANTHROPIC_API_KEY: string;
   REVENUECAT_SECRET_KEY: string;
+  UNSPLASH_ACCESS_KEY: string;
 }
 
 export type ChatRole = "user" | "assistant";
@@ -75,4 +76,36 @@ export interface ModelOutput {
 // Wire response added `remaining`.
 export interface AssistantResponse extends ModelOutput {
   remaining: number;
+}
+
+// MARK: Trip cover photos (Unsplash proxy). Keep in sync with
+// PackingHelper/Services/UnsplashService.swift.
+
+export interface PhotoSearchRequest {
+  rcAppUserId: string;
+  query: string;
+  page: number;
+}
+
+export interface PhotoDownloadRequest {
+  rcAppUserId: string;
+  downloadLocation: string;
+}
+
+export interface PhotoResult {
+  id: string;
+  width: number;
+  height: number;
+  color: string | null;
+  blurHash: string | null;
+  urls: { raw: string; small: string };
+  htmlLink: string;
+  downloadLocation: string;
+  photographer: { name: string; username: string; profileURL: string };
+}
+
+export interface PhotoSearchResponse {
+  page: number;
+  totalPages: number;
+  results: PhotoResult[];
 }

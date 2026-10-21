@@ -1,10 +1,24 @@
-import type { Env, AssistantRequest, ChatMessage } from "./types";
+import type {
+  Env,
+  AssistantRequest,
+  ChatMessage,
+  PhotoSearchRequest,
+  PhotoDownloadRequest,
+} from "./types";
 import { verifySubscriber } from "./revenuecat";
 import { getUsage, recordUsage, nextResetISO } from "./metering";
 import { callAnthropic, AnthropicError } from "./anthropic";
+import {
+  searchPhotos,
+  trackDownload,
+  isValidDownloadLocation,
+  UnsplashError,
+} from "./unsplash";
 
 const MAX_MESSAGES = 40;
 const MAX_CONTENT_CHARS = 4000;
+const MAX_QUERY_CHARS = 100;
+const MAX_PHOTO_PAGE = 50;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -46,58 +60,149 @@ function validate(body: unknown): AssistantRequest | null {
   };
 }
 
+function validatePhotoSearch(body: unknown): PhotoSearchRequest | null {
+  if (typeof body !== "object" || body === null) return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.rcAppUserId !== "string" || b.rcAppUserId.length === 0) return null;
+  if (typeof b.query !== "string") return null;
+  const query = b.query.trim();
+  if (query.length === 0 || query.length > MAX_QUERY_CHARS) return null;
+  const page = b.page === undefined ? 1 : b.page;
+  if (typeof page !== "number" || !Number.isInteger(page)) return null;
+  if (page < 1 || page > MAX_PHOTO_PAGE) return null;
+  return { rcAppUserId: b.rcAppUserId, query, page };
+}
+
+function validatePhotoDownload(body: unknown): PhotoDownloadRequest | null {
+  if (typeof body !== "object" || body === null) return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.rcAppUserId !== "string" || b.rcAppUserId.length === 0) return null;
+  if (typeof b.downloadLocation !== "string") return null;
+  if (!isValidDownloadLocation(b.downloadLocation)) return null;
+  return { rcAppUserId: b.rcAppUserId, downloadLocation: b.downloadLocation };
+}
+
+async function readJSON(request: Request): Promise<unknown | undefined> {
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function unsplashErrorResponse(e: unknown): Response {
+  if (e instanceof UnsplashError && e.rateLimited) {
+    return errorResponse(429, "rate_limited", "Too many photo searches — try again shortly.");
+  }
+  console.error("Unsplash call failed:", e instanceof Error ? e.message : e);
+  return errorResponse(502, "upstream_error", "Photo search failed.");
+}
+
+async function handleAssistantMessage(request: Request, env: Env): Promise<Response> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return errorResponse(400, "bad_request", "Body must be valid JSON.");
+  }
+
+  const req = validate(raw);
+  if (!req) {
+    return errorResponse(400, "bad_request", "Missing or invalid fields.");
+  }
+
+  // 1. Subscription gate.
+  const subscribed = await verifySubscriber(env, req.rcAppUserId);
+  if (!subscribed) {
+    return errorResponse(401, "not_subscribed", "An active subscription is required.");
+  }
+
+  // 2. Usage cap.
+  const usage = await getUsage(env, req.rcAppUserId);
+  if (usage.atCap) {
+    return errorResponse(429, "limit_reached", "Monthly message limit reached.", {
+      remaining: 0,
+      resetsAt: nextResetISO(new Date()),
+    });
+  }
+
+  // 3. Model call.
+  let output;
+  try {
+    output = await callAnthropic(env, req.tripContext, req.messages);
+  } catch (e) {
+    console.error("callAnthropic failed:", e instanceof Error ? e.message : e);
+    if (e instanceof AnthropicError && e.retryable) {
+      return errorResponse(503, "upstream_busy", "The assistant is busy — try again shortly.");
+    }
+    return errorResponse(502, "upstream_error", "The assistant failed to respond.");
+  }
+
+  // 4. Meter (only successful calls count) and respond.
+  const remaining = await recordUsage(env, req.rcAppUserId);
+  return json(
+    { message: output.message, items: output.items, remaining },
+    200,
+    { "X-Messages-Remaining": String(remaining) },
+  );
+}
+
+async function handlePhotoSearch(request: Request, env: Env): Promise<Response> {
+  const raw = await readJSON(request);
+  if (raw === undefined) {
+    return errorResponse(400, "bad_request", "Body must be valid JSON.");
+  }
+  const req = validatePhotoSearch(raw);
+  if (!req) {
+    return errorResponse(400, "bad_request", "Missing or invalid fields.");
+  }
+
+  if (!(await verifySubscriber(env, req.rcAppUserId))) {
+    return errorResponse(401, "not_subscribed", "An active subscription is required.");
+  }
+
+  try {
+    return json(await searchPhotos(env, req.query, req.page));
+  } catch (e) {
+    return unsplashErrorResponse(e);
+  }
+}
+
+async function handlePhotoDownload(request: Request, env: Env): Promise<Response> {
+  const raw = await readJSON(request);
+  if (raw === undefined) {
+    return errorResponse(400, "bad_request", "Body must be valid JSON.");
+  }
+  const req = validatePhotoDownload(raw);
+  if (!req) {
+    return errorResponse(400, "bad_request", "Missing or invalid fields.");
+  }
+
+  if (!(await verifySubscriber(env, req.rcAppUserId))) {
+    return errorResponse(401, "not_subscribed", "An active subscription is required.");
+  }
+
+  try {
+    await trackDownload(env, req.downloadLocation);
+    return new Response(null, { status: 204 });
+  } catch (e) {
+    return unsplashErrorResponse(e);
+  }
+}
+
+const routes: Record<string, (request: Request, env: Env) => Promise<Response>> = {
+  "/v1/assistant/message": handleAssistantMessage,
+  "/v1/photos/search": handlePhotoSearch,
+  "/v1/photos/download": handlePhotoDownload,
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method !== "POST" || url.pathname !== "/v1/assistant/message") {
+    const handler = routes[url.pathname];
+    if (request.method !== "POST" || !handler) {
       return errorResponse(404, "not_found", "Unknown route.");
     }
-
-    let raw: unknown;
-    try {
-      raw = await request.json();
-    } catch {
-      return errorResponse(400, "bad_request", "Body must be valid JSON.");
-    }
-
-    const req = validate(raw);
-    if (!req) {
-      return errorResponse(400, "bad_request", "Missing or invalid fields.");
-    }
-
-    // 1. Subscription gate.
-    const subscribed = await verifySubscriber(env, req.rcAppUserId);
-    if (!subscribed) {
-      return errorResponse(401, "not_subscribed", "An active subscription is required.");
-    }
-
-    // 2. Usage cap.
-    const usage = await getUsage(env, req.rcAppUserId);
-    if (usage.atCap) {
-      return errorResponse(429, "limit_reached", "Monthly message limit reached.", {
-        remaining: 0,
-        resetsAt: nextResetISO(new Date()),
-      });
-    }
-
-    // 3. Model call.
-    let output;
-    try {
-      output = await callAnthropic(env, req.tripContext, req.messages);
-    } catch (e) {
-      console.error("callAnthropic failed:", e instanceof Error ? e.message : e);
-      if (e instanceof AnthropicError && e.retryable) {
-        return errorResponse(503, "upstream_busy", "The assistant is busy — try again shortly.");
-      }
-      return errorResponse(502, "upstream_error", "The assistant failed to respond.");
-    }
-
-    // 4. Meter (only successful calls count) and respond.
-    const remaining = await recordUsage(env, req.rcAppUserId);
-    return json(
-      { message: output.message, items: output.items, remaining },
-      200,
-      { "X-Messages-Remaining": String(remaining) },
-    );
+    return handler(request, env);
   },
 } satisfies ExportedHandler<Env>;

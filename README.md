@@ -6,6 +6,7 @@ AI packing assistant. It:
 1. Verifies the caller is a paying subscriber (RevenueCat REST, entitlement `plus`).
 2. Enforces a soft usage cap (50 assistant messages / calendar month per RevenueCat app-user ID) in KV.
 3. Calls Claude (`claude-haiku-4-5`) with structured outputs and returns advice + suggested items.
+4. Proxies Unsplash photo search for trip cover photos (Plus only), caching results in KV.
 
 The Anthropic API key never leaves the Worker. The iOS app only knows this
 Worker's URL.
@@ -73,6 +74,70 @@ Errors (`{ "error": <code>, "message": <human> }`):
 | 502    | `upstream_error` | Anthropic call failed                              |
 | 503    | `upstream_busy`  | Anthropic overloaded/rate-limited (retryable)      |
 
+### `POST /v1/photos/search`
+
+Keep in sync with `PackingHelper/Services/UnsplashService.swift`.
+
+Request:
+
+```json
+{ "rcAppUserId": "$RCAnonymousID:abc123", "query": "Lisbon", "page": 1 }
+```
+
+`query` is trimmed, 1–100 chars. `page` is 1–50 (defaults to 1). Results are
+12 per page, `orientation=landscape`, `content_filter=high`, and cached in KV
+for 24h under `unsplash:search:v1:{normalizedQuery}:{page}` (lowercased,
+whitespace collapsed).
+
+Success `200`:
+
+```json
+{
+  "page": 1,
+  "totalPages": 34,
+  "results": [
+    {
+      "id": "abc123",
+      "width": 6000,
+      "height": 4000,
+      "color": "#a3b1c2",
+      "blurHash": "LKO2?U%2Tw=w]~RBVZRi};RPxuwH",
+      "urls": { "raw": "https://images.unsplash.com/...", "small": "https://images.unsplash.com/..." },
+      "htmlLink": "https://unsplash.com/photos/abc123",
+      "downloadLocation": "https://api.unsplash.com/photos/abc123/download?ixid=...",
+      "photographer": { "name": "Jane Doe", "username": "janedoe", "profileURL": "https://unsplash.com/@janedoe" }
+    }
+  ]
+}
+```
+
+`color` and `blurHash` may be `null`.
+
+### `POST /v1/photos/download`
+
+Fires Unsplash's download-tracking endpoint, which the API guidelines require
+whenever a user selects a photo. The app calls it when the trip is saved.
+
+Request:
+
+```json
+{ "rcAppUserId": "$RCAnonymousID:abc123", "downloadLocation": "https://api.unsplash.com/photos/abc123/download?ixid=..." }
+```
+
+`downloadLocation` must be `https://api.unsplash.com/photos/{id}/download`
+(anything else is a `400`, so the route can't proxy arbitrary URLs).
+
+Success `204` (no body).
+
+Photo route errors use the same shape as above:
+
+| Status | code             | Meaning                                         |
+| ------ | ---------------- | ----------------------------------------------- |
+| 400    | `bad_request`    | Missing/invalid body, query, or downloadLocation |
+| 401    | `not_subscribed` | No active `plus` entitlement                    |
+| 429    | `rate_limited`   | Unsplash hourly quota exhausted                 |
+| 502    | `upstream_error` | Other Unsplash failure                          |
+
 ## Setup
 
 ```sh
@@ -85,6 +150,7 @@ wrangler kv namespace create USAGE_KV
 # 2. Secrets.
 wrangler secret put ANTHROPIC_API_KEY
 wrangler secret put REVENUECAT_SECRET_KEY   # RevenueCat *secret* key (sk_...)
+wrangler secret put UNSPLASH_ACCESS_KEY     # Unsplash app *Access Key* (not the Secret Key)
 ```
 
 ### RevenueCat dashboard (one-time)
@@ -129,3 +195,4 @@ the iOS repo.
 - Metering key is `usage:{rcAppUserId}:{YYYY-MM}` (UTC). The month in the key *is* the reset — no cron. Keys self-expire after ~62 days.
 - KV is eventually consistent, so the cap is soft (concurrent requests can overshoot slightly). Fine for a product cap, not billing.
 - Model ID lives in `wrangler.toml [vars]` — the future per-user "intelligence add-on" resolves the model before `callAnthropic`.
+- Unsplash's quota is per app, not per user (50 req/hr on a demo app, 5,000 after production approval), so search results are cached in KV for 24h. Images themselves are hotlinked from `images.unsplash.com` by the app, as the guidelines require, and don't count against the quota.

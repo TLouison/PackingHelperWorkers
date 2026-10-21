@@ -2,6 +2,7 @@
 # In production these are set with `wrangler secret put <NAME>`.
 ANTHROPIC_API_KEY = "sk-ant-..."
 REVENUECAT_SECRET_KEY = "sk_..."
+UNSPLASH_ACCESS_KEY = "..."
 
 # Optional local overrides of the [vars] in wrangler.toml.
 # Handy for cap testing:
