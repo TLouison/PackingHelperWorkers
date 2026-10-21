@@ -42,27 +42,26 @@ export async function verifySubscriber(
 
   if (!res.ok) {
     // Treat RC outages as "not verified" rather than granting access.
-    console.log("verifySubscriber: RC HTTP", res.status, "for", rcAppUserId);
+    console.log(
+      "verifySubscriber: RC HTTP",
+      res.status,
+      "for",
+      rcAppUserId,
+      await res.text(),
+    );
     return false;
   }
 
   const body = (await res.json()) as RCResponse;
-  // TEMP DIAGNOSTIC — remove once verified. Shows the exact entitlement keys RC
-  // returns vs the ENTITLEMENT_ID we look for.
-  console.log(
-    "verifySubscriber:",
-    rcAppUserId,
-    "looking for",
-    env.ENTITLEMENT_ID,
-    "found keys",
-    JSON.stringify(Object.keys(body.subscriber?.entitlements ?? {})),
-  );
   const ent = body.subscriber?.entitlements?.[env.ENTITLEMENT_ID];
   if (!ent) return false;
 
   const active =
     ent.expires_date === null || new Date(ent.expires_date).getTime() > Date.now();
 
+  if (!active) {
+    console.log("verifySubscriber: entitlement expired at", ent.expires_date);
+  }
   if (active) {
     // Cache only the positive result.
     await env.USAGE_KV.put(cacheKey, "1", { expirationTtl: ENT_CACHE_TTL });

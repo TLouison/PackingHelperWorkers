@@ -85,6 +85,7 @@ export default {
     try {
       output = await callAnthropic(env, req.tripContext, req.messages);
     } catch (e) {
+      console.error("callAnthropic failed:", e instanceof Error ? e.message : e);
       if (e instanceof AnthropicError && e.retryable) {
         return errorResponse(503, "upstream_busy", "The assistant is busy — try again shortly.");
       }
