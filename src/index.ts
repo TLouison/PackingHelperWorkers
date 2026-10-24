@@ -3,6 +3,7 @@ import type {
   AssistantRequest,
   ChatMessage,
   PhotoSearchRequest,
+  PhotoRandomRequest,
   PhotoDownloadRequest,
 } from "./types";
 import { verifySubscriber } from "./revenuecat";
@@ -10,6 +11,7 @@ import { getUsage, recordUsage, nextResetISO } from "./metering";
 import { callAnthropic, AnthropicError } from "./anthropic";
 import {
   searchPhotos,
+  randomPhoto,
   trackDownload,
   isValidDownloadLocation,
   UnsplashError,
@@ -71,6 +73,16 @@ function validatePhotoSearch(body: unknown): PhotoSearchRequest | null {
   if (typeof page !== "number" || !Number.isInteger(page)) return null;
   if (page < 1 || page > MAX_PHOTO_PAGE) return null;
   return { rcAppUserId: b.rcAppUserId, query, page };
+}
+
+function validatePhotoRandom(body: unknown): PhotoRandomRequest | null {
+  if (typeof body !== "object" || body === null) return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.rcAppUserId !== "string" || b.rcAppUserId.length === 0) return null;
+  if (typeof b.query !== "string") return null;
+  const query = b.query.trim();
+  if (query.length === 0 || query.length > MAX_QUERY_CHARS) return null;
+  return { rcAppUserId: b.rcAppUserId, query };
 }
 
 function validatePhotoDownload(body: unknown): PhotoDownloadRequest | null {
@@ -169,6 +181,28 @@ async function handlePhotoSearch(request: Request, env: Env): Promise<Response> 
   }
 }
 
+async function handlePhotoRandom(request: Request, env: Env): Promise<Response> {
+  const raw = await readJSON(request);
+  if (raw === undefined) {
+    return errorResponse(400, "bad_request", "Body must be valid JSON.");
+  }
+  const req = validatePhotoRandom(raw);
+  if (!req) {
+    return errorResponse(400, "bad_request", "Missing or invalid fields.");
+  }
+
+  // Not gated: new trips get a random cover photo for everyone.
+  try {
+    const photo = await randomPhoto(env, req.query);
+    if (!photo) {
+      return errorResponse(404, "no_results", "No photos matched that search.");
+    }
+    return json(photo);
+  } catch (e) {
+    return unsplashErrorResponse(e);
+  }
+}
+
 async function handlePhotoDownload(request: Request, env: Env): Promise<Response> {
   const raw = await readJSON(request);
   if (raw === undefined) {
@@ -192,6 +226,7 @@ async function handlePhotoDownload(request: Request, env: Env): Promise<Response
 const routes: Record<string, (request: Request, env: Env) => Promise<Response>> = {
   "/v1/assistant/message": handleAssistantMessage,
   "/v1/photos/search": handlePhotoSearch,
+  "/v1/photos/random": handlePhotoRandom,
   "/v1/photos/download": handlePhotoDownload,
 };
 

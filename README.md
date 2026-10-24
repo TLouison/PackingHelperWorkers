@@ -114,6 +114,24 @@ Success `200`:
 
 `color` and `blurHash` may be `null`.
 
+### `POST /v1/photos/random`
+
+One random photo for a query, used to give new trips a default cover photo.
+Not subscription-gated and not cached (each call spends Unsplash quota).
+
+Request:
+
+```json
+{ "rcAppUserId": "$RCAnonymousID:abc123", "query": "Lisbon" }
+```
+
+`query` is trimmed, 1–100 chars. Uses `orientation=landscape`,
+`content_filter=high`.
+
+Success `200`: a single photo object, same shape as one entry of the search
+`results` above. `404 no_results` when nothing matches (the app then retries
+with the trip name).
+
 ### `POST /v1/photos/download`
 
 Fires Unsplash's download-tracking endpoint, which the API guidelines require
@@ -137,6 +155,7 @@ Photo route errors use the same shape as above:
 | ------ | ---------------- | ----------------------------------------------- |
 | 400    | `bad_request`    | Missing/invalid body, query, or downloadLocation |
 | 401    | `not_subscribed` | Search `page` > 1 without an active `plus` entitlement |
+| 404    | `no_results`     | Random: no photo matched the query              |
 | 429    | `rate_limited`   | Unsplash hourly quota exhausted                 |
 | 502    | `upstream_error` | Other Unsplash failure                          |
 

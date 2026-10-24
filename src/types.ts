@@ -87,6 +87,11 @@ export interface PhotoSearchRequest {
   page: number;
 }
 
+export interface PhotoRandomRequest {
+  rcAppUserId: string;
+  query: string;
+}
+
 export interface PhotoDownloadRequest {
   rcAppUserId: string;
   downloadLocation: string;

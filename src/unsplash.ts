@@ -96,6 +96,26 @@ export async function searchPhotos(
 }
 
 /**
+ * One random photo for `query`, or `null` when nothing matches. Not cached:
+ * every call is meant to return a different photo, so each one spends quota.
+ */
+export async function randomPhoto(env: Env, query: string): Promise<PhotoResult | null> {
+  const url = new URL("https://api.unsplash.com/photos/random");
+  url.searchParams.set("query", normalizeQuery(query));
+  url.searchParams.set("orientation", "landscape");
+  url.searchParams.set("content_filter", "high");
+
+  const res = await fetch(url, { headers: headers(env) });
+  // Unsplash answers 404 when no photo matches the query.
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    console.error("randomPhoto: Unsplash HTTP", res.status, await res.text());
+    throw new UnsplashError(res.status, res.status === 403 || res.status === 429);
+  }
+  return toResult((await res.json()) as UnsplashPhoto);
+}
+
+/**
  * Only Unsplash's own download-tracking endpoint is accepted, so this route
  * can't be used to make the Worker fetch arbitrary URLs.
  */
