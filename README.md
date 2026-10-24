@@ -6,7 +6,7 @@ AI packing assistant. It:
 1. Verifies the caller is a paying subscriber (RevenueCat REST, entitlement `plus`).
 2. Enforces a soft usage cap (50 assistant messages / calendar month per RevenueCat app-user ID) in KV.
 3. Calls Claude (`claude-haiku-4-5`) with structured outputs and returns advice + suggested items.
-4. Proxies Unsplash photo search for trip cover photos (Plus only), caching results in KV.
+4. Proxies Unsplash photo search for trip cover photos (first page free, further pages Plus only), caching results in KV.
 
 The Anthropic API key never leaves the Worker. The iOS app only knows this
 Worker's URL.
@@ -85,9 +85,10 @@ Request:
 ```
 
 `query` is trimmed, 1–100 chars. `page` is 1–50 (defaults to 1). Results are
-12 per page, `orientation=landscape`, `content_filter=high`, and cached in KV
-for 24h under `unsplash:search:v1:{normalizedQuery}:{page}` (lowercased,
-whitespace collapsed).
+25 per page, `orientation=landscape`, `content_filter=high`, and cached in KV
+for 24h under `unsplash:search:v2:{normalizedQuery}:{page}` (lowercased,
+whitespace collapsed). Page 1 needs no subscription (the app shows free users
+one page for their destination); `page` > 1 requires the `plus` entitlement.
 
 Success `200`:
 
@@ -126,6 +127,7 @@ Request:
 
 `downloadLocation` must be `https://api.unsplash.com/photos/{id}/download`
 (anything else is a `400`, so the route can't proxy arbitrary URLs).
+Not subscription-gated, since free users can pick photos from the first page.
 
 Success `204` (no body).
 
@@ -134,7 +136,7 @@ Photo route errors use the same shape as above:
 | Status | code             | Meaning                                         |
 | ------ | ---------------- | ----------------------------------------------- |
 | 400    | `bad_request`    | Missing/invalid body, query, or downloadLocation |
-| 401    | `not_subscribed` | No active `plus` entitlement                    |
+| 401    | `not_subscribed` | Search `page` > 1 without an active `plus` entitlement |
 | 429    | `rate_limited`   | Unsplash hourly quota exhausted                 |
 | 502    | `upstream_error` | Other Unsplash failure                          |
 

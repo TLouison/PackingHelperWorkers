@@ -3,7 +3,7 @@ import type { Env, PhotoResult, PhotoSearchResponse } from "./types";
 // Search results change slowly; a day of caching keeps popular destinations
 // from spending the (shared, per-app) Unsplash hourly quota.
 const SEARCH_CACHE_TTL = 60 * 60 * 24;
-const PER_PAGE = 12;
+const PER_PAGE = 25;
 
 export class UnsplashError extends Error {
   constructor(
@@ -65,7 +65,7 @@ export async function searchPhotos(
   page: number,
 ): Promise<PhotoSearchResponse> {
   const normalized = normalizeQuery(query);
-  const cacheKey = `unsplash:search:v1:${normalized}:${page}`;
+  const cacheKey = `unsplash:search:v2:${normalized}:${page}`;
   const cached = await env.USAGE_KV.get<PhotoSearchResponse>(cacheKey, "json");
   if (cached) return cached;
 

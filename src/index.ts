@@ -157,7 +157,8 @@ async function handlePhotoSearch(request: Request, env: Env): Promise<Response> 
     return errorResponse(400, "bad_request", "Missing or invalid fields.");
   }
 
-  if (!(await verifySubscriber(env, req.rcAppUserId))) {
+  // The first page is free for everyone; loading more needs Plus.
+  if (req.page > 1 && !(await verifySubscriber(env, req.rcAppUserId))) {
     return errorResponse(401, "not_subscribed", "An active subscription is required.");
   }
 
@@ -178,10 +179,8 @@ async function handlePhotoDownload(request: Request, env: Env): Promise<Response
     return errorResponse(400, "bad_request", "Missing or invalid fields.");
   }
 
-  if (!(await verifySubscriber(env, req.rcAppUserId))) {
-    return errorResponse(401, "not_subscribed", "An active subscription is required.");
-  }
-
+  // Not gated: free users pick photos from the first page, and Unsplash
+  // requires the download ping for every pick.
   try {
     await trackDownload(env, req.downloadLocation);
     return new Response(null, { status: 204 });
