@@ -18,20 +18,26 @@ Keep this in sync with the Swift DTOs in
 
 ### `POST /v1/assistant/message`
 
-Request:
+Request (trip mode):
 
 ```json
 {
   "rcAppUserId": "$RCAnonymousID:abc123",
+  "mode": "trip",
   "tripContext": {
+    "tripName": "Lisbon Getaway",
     "destinationName": "Lisbon, Portugal",
+    "destinationLatitude": 38.72,
+    "originName": "Boston, MA",
     "startDate": "2026-08-10",
     "endDate": "2026-08-15",
     "durationDays": 5,
     "tripType": "plane",
     "accommodation": "hotel",
     "packerCount": 2,
+    "listNames": ["Default", "Beach"],
     "existingItems": ["Passport", "Swimsuit", "Laptop"],
+    "otherPackersItems": ["Sunscreen"],
     "weather": {
       "currentTempC": 26,
       "daily": [
@@ -41,6 +47,29 @@ Request:
   },
   "messages": [
     { "role": "user", "content": "We're doing a beach day and one nice dinner." }
+  ]
+}
+```
+
+`mode` defaults to `"trip"` when omitted (older clients). `existingItems` is the
+asking packer's items plus unassigned ones, packed or not; `otherPackersItems`,
+`tripName`, `destinationLatitude`, `originName`, and `listNames` are optional.
+
+Request (template mode), for building a reusable template list with no trip:
+
+```json
+{
+  "rcAppUserId": "$RCAnonymousID:abc123",
+  "mode": "template",
+  "templateContext": {
+    "name": "Beach Weekend",
+    "listKind": "packing",
+    "isDayOf": false,
+    "countAsDays": false,
+    "existingItems": ["Swimsuit"]
+  },
+  "messages": [
+    { "role": "user", "content": "Suggest a starting set for Beach Weekend" }
   ]
 }
 ```

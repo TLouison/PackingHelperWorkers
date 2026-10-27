@@ -1,23 +1,52 @@
 {
   "rcAppUserId": "REPLACE_WITH_SANDBOX_SUBSCRIBED_RC_ID",
+  "mode": "trip",
   "tripContext": {
+    "tripName": "Lisbon Getaway",
     "destinationName": "Lisbon, Portugal",
+    "destinationLatitude": 38.72,
+    "originName": "Boston, MA",
     "startDate": "2026-08-10",
     "endDate": "2026-08-15",
     "durationDays": 5,
     "tripType": "plane",
     "accommodation": "hotel",
     "packerCount": 2,
-    "existingItems": ["Passport", "Swimsuit", "Laptop", "Toothbrush"],
+    "existingItems": [
+      "Passport",
+      "Swimsuit",
+      "Laptop",
+      "Toothbrush"
+    ],
     "weather": {
       "currentTempC": 26,
       "daily": [
-        { "day": "2026-08-10", "highC": 30, "lowC": 19, "condition": "Sunny" },
-        { "day": "2026-08-11", "highC": 31, "lowC": 20, "condition": "Clear" }
+        {
+          "day": "2026-08-10",
+          "highC": 30,
+          "lowC": 19,
+          "condition": "Sunny"
+        },
+        {
+          "day": "2026-08-11",
+          "highC": 31,
+          "lowC": 20,
+          "condition": "Clear"
+        }
       ]
-    }
+    },
+    "listNames": [
+      "Default",
+      "Beach"
+    ],
+    "otherPackersItems": [
+      "Sunscreen"
+    ]
   },
   "messages": [
-    { "role": "user", "content": "We're doing a beach day and one nice dinner out. What am I missing?" }
+    {
+      "role": "user",
+      "content": "We're doing a beach day and one nice dinner out. What am I missing?"
+    }
   ]
 }

@@ -33,22 +33,36 @@ export interface WeatherContext {
 }
 
 export interface TripContext {
+  tripName?: string;
   destinationName: string;
+  destinationLatitude?: number; // for hemisphere / tropics
+  originName?: string;
   startDate: string; // ISO date
   endDate: string; // ISO date
   durationDays: number;
-  tripType: string; // plane | car | train | boat | ferry
-  accommodation: string; // hotel | rental | family | friend
+  tripType: string; // comma-separated: plane, car, train, boat, ferry
+  accommodation: string; // comma-separated: hotel, rental, with family, with friends
   packerCount: number;
-  existingItems: string[];
+  listNames?: string[];
+  existingItems: string[]; // this packer's items + unassigned, packed or not
+  otherPackersItems?: string[]; // what the trip's other packers are bringing
   weather?: WeatherContext; // omitted when unavailable (>5 days out, no data)
 }
 
-export interface AssistantRequest {
-  rcAppUserId: string;
-  tripContext: TripContext;
-  messages: ChatMessage[];
+// A reusable template list, not tied to a trip.
+export interface TemplateContext {
+  name: string;
+  listKind: "packing" | "tasks";
+  isDayOf: boolean;
+  countAsDays: boolean; // counts become the trip's length when applied
+  existingItems: string[];
 }
+
+export type AssistantMode = "trip" | "template";
+
+export type AssistantRequest =
+  | { rcAppUserId: string; mode: "trip"; tripContext: TripContext; messages: ChatMessage[] }
+  | { rcAppUserId: string; mode: "template"; templateContext: TemplateContext; messages: ChatMessage[] };
 
 export type SuggestionCategory =
   | "Clothing"

@@ -1,4 +1,4 @@
-import type { Env, ChatMessage, ModelOutput, TripContext } from "./types";
+import type { Env, AssistantRequest, ModelOutput } from "./types";
 import { buildSystemPrompt, SUGGESTION_SCHEMA } from "./prompt";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -23,11 +23,7 @@ interface AnthropicMessagesResponse {
  * runtime deps and no SDK-version coupling) with structured outputs, and
  * returns the parsed, schema-valid model output.
  */
-export async function callAnthropic(
-  env: Env,
-  tripContext: TripContext,
-  messages: ChatMessage[],
-): Promise<ModelOutput> {
+export async function callAnthropic(env: Env, req: AssistantRequest): Promise<ModelOutput> {
   const res = await fetch(ANTHROPIC_URL, {
     method: "POST",
     headers: {
@@ -36,10 +32,10 @@ export async function callAnthropic(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: env.MODEL, // "claude-haiku-4-5" — no thinking/effort params (unsupported)
+      model: env.MODEL, // from wrangler.toml [vars]
       max_tokens: 2048,
-      system: buildSystemPrompt(tripContext),
-      messages,
+      system: buildSystemPrompt(req),
+      messages: req.messages,
       output_config: {
         format: { type: "json_schema", schema: SUGGESTION_SCHEMA },
       },

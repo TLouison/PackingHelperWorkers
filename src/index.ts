@@ -2,6 +2,8 @@ import type {
   Env,
   AssistantRequest,
   ChatMessage,
+  TemplateContext,
+  TripContext,
   PhotoSearchRequest,
   PhotoRandomRequest,
   PhotoDownloadRequest,
@@ -42,7 +44,11 @@ function validate(body: unknown): AssistantRequest | null {
   if (typeof body !== "object" || body === null) return null;
   const b = body as Record<string, unknown>;
   if (typeof b.rcAppUserId !== "string" || b.rcAppUserId.length === 0) return null;
-  if (typeof b.tripContext !== "object" || b.tripContext === null) return null;
+  // Older clients send no mode: trip.
+  const mode = b.mode ?? "trip";
+  if (mode !== "trip" && mode !== "template") return null;
+  const contextKey = mode === "trip" ? "tripContext" : "templateContext";
+  if (typeof b[contextKey] !== "object" || b[contextKey] === null) return null;
   if (!Array.isArray(b.messages) || b.messages.length === 0) return null;
 
   const messages: ChatMessage[] = [];
@@ -55,9 +61,22 @@ function validate(body: unknown): AssistantRequest | null {
   }
   if (messages.length > MAX_MESSAGES) return null;
 
+  if (mode === "template") {
+    const t = b.templateContext as Record<string, unknown>;
+    if (typeof t.name !== "string" || !Array.isArray(t.existingItems)) return null;
+    return {
+      rcAppUserId: b.rcAppUserId,
+      mode: "template",
+      templateContext: b.templateContext as TemplateContext,
+      messages,
+    };
+  }
+  const t = b.tripContext as Record<string, unknown>;
+  if (!Array.isArray(t.existingItems)) return null;
   return {
     rcAppUserId: b.rcAppUserId,
-    tripContext: b.tripContext as AssistantRequest["tripContext"],
+    mode: "trip",
+    tripContext: b.tripContext as TripContext,
     messages,
   };
 }
@@ -141,7 +160,7 @@ async function handleAssistantMessage(request: Request, env: Env): Promise<Respo
   // 3. Model call.
   let output;
   try {
-    output = await callAnthropic(env, req.tripContext, req.messages);
+    output = await callAnthropic(env, req);
   } catch (e) {
     console.error("callAnthropic failed:", e instanceof Error ? e.message : e);
     if (e instanceof AnthropicError && e.retryable) {
