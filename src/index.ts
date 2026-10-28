@@ -8,7 +8,7 @@ import type {
   PhotoRandomRequest,
   PhotoDownloadRequest,
 } from "./types";
-import { verifySubscriber } from "./revenuecat";
+import { verifySubscriber, RevenueCatError } from "./revenuecat";
 import { getUsage, recordUsage, nextResetISO } from "./metering";
 import { callAnthropic, AnthropicError } from "./anthropic";
 import {
@@ -38,6 +38,21 @@ function errorResponse(
   extra: Record<string, unknown> = {},
 ): Response {
   return json({ error: code, message, ...extra }, status);
+}
+
+/**
+ * The Plus gate: null when subscribed, otherwise the error to return. A RevenueCat
+ * failure is a retryable 503, not a 401, so the app doesn't treat it as a lapse.
+ */
+async function requirePlus(env: Env, rcAppUserId: string): Promise<Response | null> {
+  try {
+    if (await verifySubscriber(env, rcAppUserId)) return null;
+  } catch (e) {
+    if (!(e instanceof RevenueCatError)) throw e;
+    console.error("verifySubscriber failed:", e.message);
+    return errorResponse(503, "subscription_check_failed", "Couldn't check the subscription — try again shortly.");
+  }
+  return errorResponse(401, "not_subscribed", "An active subscription is required.");
 }
 
 function validate(body: unknown): AssistantRequest | null {
@@ -143,10 +158,8 @@ async function handleAssistantMessage(request: Request, env: Env): Promise<Respo
   }
 
   // 1. Subscription gate.
-  const subscribed = await verifySubscriber(env, req.rcAppUserId);
-  if (!subscribed) {
-    return errorResponse(401, "not_subscribed", "An active subscription is required.");
-  }
+  const gate = await requirePlus(env, req.rcAppUserId);
+  if (gate) return gate;
 
   // 2. Usage cap.
   const usage = await getUsage(env, req.rcAppUserId);
@@ -189,8 +202,9 @@ async function handlePhotoSearch(request: Request, env: Env): Promise<Response> 
   }
 
   // The first page is free for everyone; loading more needs Plus.
-  if (req.page > 1 && !(await verifySubscriber(env, req.rcAppUserId))) {
-    return errorResponse(401, "not_subscribed", "An active subscription is required.");
+  if (req.page > 1) {
+    const gate = await requirePlus(env, req.rcAppUserId);
+    if (gate) return gate;
   }
 
   try {

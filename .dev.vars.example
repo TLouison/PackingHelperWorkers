@@ -1,7 +1,7 @@
 # Copy to `.dev.vars` (gitignored) for `wrangler dev`.
 # In production these are set with `wrangler secret put <NAME>`.
 ANTHROPIC_API_KEY = "sk-ant-..."
-REVENUECAT_SECRET_KEY = "sk_..."
+REVENUECAT_SECRET_KEY = "sk_..."   # RevenueCat v2 secret key
 UNSPLASH_ACCESS_KEY = "..."
 
 # Optional local overrides of the [vars] in wrangler.toml.

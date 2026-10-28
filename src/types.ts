@@ -6,10 +6,11 @@ export interface Env {
   // vars (wrangler.toml [vars])
   MODEL: string;
   MONTHLY_CAP: string;
-  ENTITLEMENT_ID: string;
+  RC_PROJECT_ID: string;
+  ENTITLEMENT_ID: string; // RevenueCat v2 entitlement id (entl...), not the lookup key
   // secrets (wrangler secret put)
   ANTHROPIC_API_KEY: string;
-  REVENUECAT_SECRET_KEY: string;
+  REVENUECAT_SECRET_KEY: string; // v2 secret key with customer information read access
   UNSPLASH_ACCESS_KEY: string;
 }
 

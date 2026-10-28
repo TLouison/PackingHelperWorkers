@@ -118,10 +118,11 @@ Errors (`{ "error": <code>, "message": <human> }`):
 | Status | code             | Meaning                                            |
 | ------ | ---------------- | -------------------------------------------------- |
 | 400    | `bad_request`    | Missing/invalid body                               |
-| 401    | `not_subscribed` | No active `plus` entitlement                       |
+| 401    | `not_subscribed` | No active Plus entitlement                         |
 | 429    | `limit_reached`  | Monthly cap hit (adds `remaining: 0`, `resetsAt`)  |
 | 502    | `upstream_error` | Anthropic call failed                              |
 | 503    | `upstream_busy`  | Anthropic overloaded/rate-limited (retryable)      |
+| 503    | `subscription_check_failed` | RevenueCat unreachable or rejected the key (retryable) |
 
 ### `POST /v1/photos/search`
 
@@ -203,7 +204,8 @@ Photo route errors use the same shape as above:
 | Status | code             | Meaning                                         |
 | ------ | ---------------- | ----------------------------------------------- |
 | 400    | `bad_request`    | Missing/invalid body, query, or downloadLocation |
-| 401    | `not_subscribed` | Search `page` > 1 without an active `plus` entitlement |
+| 401    | `not_subscribed` | Search `page` > 1 without an active Plus entitlement |
+| 503    | `subscription_check_failed` | Page > 1 and RevenueCat couldn't be checked |
 | 404    | `no_results`     | Random: no photo matched the query              |
 | 429    | `rate_limited`   | Unsplash hourly quota exhausted                 |
 | 502    | `upstream_error` | Other Unsplash failure                          |
@@ -219,7 +221,7 @@ wrangler kv namespace create USAGE_KV
 
 # 2. Secrets.
 wrangler secret put ANTHROPIC_API_KEY
-wrangler secret put REVENUECAT_SECRET_KEY   # RevenueCat *secret* key (sk_...)
+wrangler secret put REVENUECAT_SECRET_KEY   # RevenueCat *v2 secret* key (sk_...)
 wrangler secret put UNSPLASH_ACCESS_KEY     # Unsplash app *Access Key* (not the Secret Key)
 ```
 
@@ -228,7 +230,11 @@ wrangler secret put UNSPLASH_ACCESS_KEY     # Unsplash app *Access Key* (not the
 - Create an **entitlement** with identifier `plus`.
 - Attach the products `FY2X7BQ9` (annual) and `4HT3JM8D` (monthly) to it.
 - Ensure App Store Connect is linked so observer-mode StoreKit transactions sync.
-- Copy the **secret** API key (`sk_…`) → `wrangler secret put REVENUECAT_SECRET_KEY`.
+- Create a **v2 secret** API key (`sk_…`) with read access to customer information
+  → `wrangler secret put REVENUECAT_SECRET_KEY`. The gate uses the v2
+  active-entitlements endpoint; v1 `/subscribers` can miss an active App Store
+  purchase when the customer also has Test Store purchases.
+- Set `RC_PROJECT_ID` and `ENTITLEMENT_ID` (the entitlement's `entl…` id) in `wrangler.toml`.
   The iOS app keeps using the **public** SDK key.
 
 ## Local dev
