@@ -2,6 +2,7 @@ import type {
   Env,
   AssistantRequest,
   ChatMessage,
+  TemplateCandidate,
   TemplateContext,
   TripContext,
   PhotoSearchRequest,
@@ -23,6 +24,8 @@ const MAX_MESSAGES = 40;
 const MAX_CONTENT_CHARS = 4000;
 const MAX_QUERY_CHARS = 100;
 const MAX_PHOTO_PAGE = 50;
+const MAX_TEMPLATE_CANDIDATES = 5;
+const MAX_TEMPLATE_ITEMS = 25;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -92,6 +95,15 @@ function validate(body: unknown): AssistantRequest | null {
   } else if (!Array.isArray(t.existingItems)) {
     return null;
   }
+  if (t.templateCandidates !== undefined) {
+    if (!Array.isArray(t.templateCandidates) || !t.templateCandidates.every(isTemplateCandidate)) return null;
+    // Candidates are paid at full input price on every send; the app sends ≤ 5 × 25 items
+    t.templateCandidates = t.templateCandidates.slice(0, MAX_TEMPLATE_CANDIDATES).map((c) => ({
+      ...c,
+      items: c.items.slice(0, MAX_TEMPLATE_ITEMS),
+      signals: c.signals.slice(0, 3),
+    }));
+  }
   return {
     rcAppUserId: b.rcAppUserId,
     mode: "trip",
@@ -105,6 +117,14 @@ function isTripList(value: unknown): boolean {
   const l = value as Record<string, unknown>;
   return typeof l.id === "string" && typeof l.name === "string" && Array.isArray(l.items)
     && l.items.every((item) => typeof item === "string");
+}
+
+function isTemplateCandidate(value: unknown): value is TemplateCandidate {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Record<string, unknown>;
+  return typeof c.id === "string" && typeof c.name === "string"
+    && Array.isArray(c.items) && c.items.every((item) => typeof item === "string")
+    && Array.isArray(c.signals) && c.signals.every((signal) => typeof signal === "string");
 }
 
 function validatePhotoSearch(body: unknown): PhotoSearchRequest | null {
@@ -196,7 +216,7 @@ async function handleAssistantMessage(request: Request, env: Env): Promise<Respo
   // 4. Meter (only successful calls count) and respond.
   const remaining = await recordUsage(env, req.rcAppUserId);
   return json(
-    { message: output.message, items: output.items, remaining },
+    { message: output.message, items: output.items, template: output.template, remaining },
     200,
     { "X-Messages-Remaining": String(remaining) },
   );

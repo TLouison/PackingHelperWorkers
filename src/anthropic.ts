@@ -1,4 +1,4 @@
-import type { Env, AssistantRequest, ModelOutput } from "./types";
+import type { Env, AssistantRequest, ModelOutput, TemplateMatch } from "./types";
 import { buildPrompt, SUGGESTION_SCHEMA } from "./prompt";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -95,5 +95,14 @@ export async function callAnthropic(env: Env, req: AssistantRequest): Promise<Mo
   return {
     message: typeof parsed.message === "string" ? parsed.message : "",
     items: Array.isArray(parsed.items) ? parsed.items : [],
+    template: offeredTemplate(req, parsed.template),
   };
+}
+
+// Trip mode only, and only a template that was in the request's candidates
+function offeredTemplate(req: AssistantRequest, template: TemplateMatch | undefined): TemplateMatch | undefined {
+  if (req.mode !== "trip" || !template || typeof template.id !== "string") return undefined;
+  const candidates = req.tripContext.templateCandidates ?? [];
+  if (!candidates.some((c) => c.id === template.id)) return undefined;
+  return { id: template.id, reason: typeof template.reason === "string" ? template.reason : "" };
 }

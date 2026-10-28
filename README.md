@@ -55,6 +55,17 @@ Request (trip mode):
         ]
       }
     ],
+    "templateCandidates": [
+      {
+        "id": "T1",
+        "name": "Beach Weekend",
+        "kind": "packing",
+        "isDayOf": false,
+        "itemCount": 14,
+        "items": ["Swimsuit", "Sunscreen", "Beach towel"],
+        "signals": ["used on \"Maui\", a similar trip"]
+      }
+    ],
     "weather": {
       "currentTempC": 26,
       "daily": [
@@ -102,6 +113,11 @@ Request (template mode), for building a reusable template list with no trip:
 }
 ```
 
+`templateCandidates` (optional, usually empty) are templates the app found a hard
+reason for: used on a similar trip, a name word matching the trip or a list, or much
+of it already on the trip. It sends at most 5, with up to 25 items each and the
+reasons as `signals`; templates already on the trip or already offered in the chat
+are left out. `id` is a short per-request id (`T1`, …) like list ids.
 `tripContext.weather` is optional — omitted when the trip is outside the 5-day
 forecast window.
 
@@ -116,9 +132,15 @@ Success `200`:
     { "name": "Trail mix", "category": "other", "count": 1, "kind": "packing", "fromTrip": "Maui", "listId": "L1" },
     { "name": "Reserve dinner spot", "category": "Task", "count": 1, "kind": "task" }
   ],
+  "template": { "id": "T1", "reason": "You used it on Maui, another warm beach trip" },
   "remaining": 42
 }
 ```
+
+`template` (trip mode, optional, usually absent) is at most one template from
+`templateCandidates` that the model is confident fits. The Worker drops it when its
+`id` wasn't in the request. The app shows it as a row that adds the template as a
+new list.
 
 `listId` (trip mode, optional) is the list the model picked for the item. The model
 leaves it out when no list fits. The app ignores it when it's unknown or the list is
@@ -283,7 +305,7 @@ the iOS repo.
 ## Design notes
 
 - Raw `fetch` to the Anthropic API (no SDK) → zero runtime deps, no SDK-version coupling on Workers.
-- Prompt caching (`src/anthropic.ts`): the system prompt is two cached blocks, the mode's instructions (identical for every user) then the trip/template context (trip facts, weather, past trips; fixed for a chat session). The latest user turn carries a third breakpoint, so each send reads the earlier history from cache. What's on their lists right now (`lists`, `otherPackersItems`) changes whenever they add an item, so it goes last as a mid-conversation `role: "system"` message and never invalidates the cache. Each call logs `usage mode=… in=… cacheRead=… cacheWrite=… out=…`; after the first send in a chat, `cacheRead` should be most of the input.
+- Prompt caching (`src/anthropic.ts`): the system prompt is two cached blocks, the mode's instructions (identical for every user) then the trip/template context (trip facts, weather, past trips; fixed for a chat session). The latest user turn carries a third breakpoint, so each send reads the earlier history from cache. What's on their lists right now (`lists`, `otherPackersItems`, `templateCandidates`) changes whenever they add an item, so it goes last as a mid-conversation `role: "system"` message and never invalidates the cache. Each call logs `usage mode=… in=… cacheRead=… cacheWrite=… out=…`; after the first send in a chat, `cacheRead` should be most of the input.
 - Metering key is `usage:{rcAppUserId}:{YYYY-MM}` (UTC). The month in the key *is* the reset — no cron. Keys self-expire after ~62 days.
 - KV is eventually consistent, so the cap is soft (concurrent requests can overshoot slightly). Fine for a product cap, not billing.
 - Model ID lives in `wrangler.toml [vars]` — the future per-user "intelligence add-on" resolves the model before `callAnthropic`.

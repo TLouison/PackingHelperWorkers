@@ -1,4 +1,4 @@
-import type { AssistantRequest, PastTrip, TemplateContext, TripContext, TripList } from "./types";
+import type { AssistantRequest, PastTrip, TemplateCandidate, TemplateContext, TripContext, TripList } from "./types";
 
 // Cap the item lists so a huge trip can't blow up the prompt.
 const MAX_EXISTING_ITEMS = 200;
@@ -30,6 +30,7 @@ Use every trip detail:
 - Scale "count" to trip duration (clothing) and number of packers. Use 1 for shared/single items.
 - Other packers on the trip: shared items they're already bringing (sunscreen, adapters, first aid) are covered; personal items (toothbrush, clothes) are not.
 - Each item goes on one of their lists: set "listId" to that list's id, exactly as given. Match the list's name and purpose (snorkel gear -> a Beach list; toiletries -> a Toiletries list). Tasks go only on tasks lists and things to pack only on packing lists. Day-of lists are for things done or grabbed the day they leave ("Charge phone", "Pack snacks for the car", "Take out the trash"); use one only when the item clearly belongs to that day. Never put an item on a list whose name doesn't fit it (a toothbrush doesn't go on a "Clothes" list). When nothing fits clearly, use their default list for things to pack if they have one; otherwise, and for tasks with no fitting tasks list, leave "listId" out and the app makes a new list for it. Never make up an id. Where an item goes doesn't change what counts as already covered: an item on any list covers every list.
+- Templates: when a "Templates they could add" block is present, you may offer at most one of those templates in "template", set to its id exactly as given, and only when you're highly confident it fits this trip's purpose. Usually offer none. Never offer a template that isn't listed. "reason" is one short sentence specific to this trip, and may build on the listed reason ("You used it on Maui, another warm beach trip"). When you offer a template, don't also suggest items it contains, and mention it briefly in "message" ("Your Beach Weekend template looks like a fit"). A template doesn't count toward the item guidance below. If they ask whether any template fits and none clearly does, say so plainly and leave "template" out. With no templates block, always leave "template" out.
 - Past trips (most similar first) show what this person actually brings. When a past trip is like this one (same kind of place, season, purpose, or transport), suggest the specific things they brought then, using their exact item names: their snacks, their gear, the lists they made themselves. Lists made on a trip (no template) are the strongest signal of personal habits. Items that show up on several past trips are safe bets. Skip items that only made sense for that trip (tickets, gifts for a specific event, a wedding outfit) and anything from a dissimilar trip. Set "fromTrip" to the past trip's name for these, and mention the trip in "message" when it helps ("Like your Maui trip, ...").
 
 ${ITEM_RULES}`;
@@ -114,6 +115,20 @@ function listsBlock(lists: TripList[]): string {
   return `Their lists, as id · name (kind): items already on it, packed or not. Do NOT re-suggest any of these items for any list.\n${rows.join("\n")}${noDefault}`;
 }
 
+// Only templates the app found a hard reason for (used on a similar trip, name match, or much
+// of it already on the trip). In the uncached current state: they drop out once applied or offered.
+function templatesBlock(candidates: TemplateCandidate[] | undefined): string | null {
+  if (!candidates || candidates.length === 0) return null;
+  const rows = candidates.map((t) => {
+    const kind = [t.kind === "tasks" ? "tasks" : "packing", t.isDayOf ? "day-of" : null]
+      .filter((d) => d !== null)
+      .join(", ");
+    const details = [`${kind}, ${t.itemCount} item(s)`, ...t.signals].join("; ");
+    return `- ${t.id} · ${t.name} (${details}): ${t.items.join(", ")}`;
+  });
+  return `Templates they could add, as id · name (kind, size; why it may fit): first items. Offer at most one, only if it clearly fits.\n${rows.join("\n")}`;
+}
+
 function weatherBlock(ctx: TripContext): string {
   if (!ctx.weather) {
     return "Weather: no forecast yet (trip is outside the forecast window); advise from destination and season.";
@@ -163,6 +178,7 @@ function tripPrompt(ctx: TripContext): PromptParts {
     ctx.otherPackersItems && ctx.otherPackersItems.length > 0
       ? `Other packers are bringing: ${itemList(ctx.otherPackersItems, "")}`
       : null,
+    templatesBlock(ctx.templateCandidates),
   ];
   return {
     instructions: TRIP_INSTRUCTIONS,
@@ -193,7 +209,8 @@ export function buildPrompt(req: AssistantRequest): PromptParts {
 
 // Structured-output schema. Constraints kept within what structured outputs
 // support: additionalProperties:false everywhere, enums, no min/max.
-// accessoryFor, fromTrip, and listId are optional (omitted from "required").
+// accessoryFor, fromTrip, listId, and template are optional (omitted from "required").
+// Template mode's prompt never mentions listId or template.
 export const SUGGESTION_SCHEMA = {
   type: "object",
   properties: {
@@ -217,6 +234,15 @@ export const SUGGESTION_SCHEMA = {
         required: ["name", "category", "count", "kind"],
         additionalProperties: false,
       },
+    },
+    template: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        reason: { type: "string" },
+      },
+      required: ["id", "reason"],
+      additionalProperties: false,
     },
   },
   required: ["message", "items"],

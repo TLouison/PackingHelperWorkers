@@ -50,7 +50,20 @@ export interface TripContext {
   existingItems?: string[]; // this packer's items + unassigned, packed or not
   otherPackersItems?: string[]; // what the trip's other packers are bringing
   pastTrips?: PastTrip[]; // most similar other trips first
+  templateCandidates?: TemplateCandidate[]; // templates that may fit, strongest first; usually empty
   weather?: WeatherContext; // omitted when unavailable (>5 days out, no data)
+}
+
+// One of the user's templates the app pre-filtered as a possible fit for the trip. The model
+// may offer at most one, by `id`.
+export interface TemplateCandidate {
+  id: string; // short per-request id ("T1", "T2", …); the app maps it back to the template
+  name: string;
+  kind: "packing" | "tasks";
+  isDayOf: boolean;
+  itemCount: number;
+  items: string[]; // its first items
+  signals: string[]; // why it may fit, e.g. 'used on "Maui", a similar trip'
 }
 
 // A list on the trip. Suggestions name the list they go on by `id`.
@@ -117,10 +130,17 @@ export interface SuggestedItem {
   listId?: string; // trip mode: the TripList it goes on; the app checks it before use
 }
 
+// Trip mode: a template the model thinks fits, from the request's templateCandidates.
+export interface TemplateMatch {
+  id: string;
+  reason: string; // one short line for the app's row
+}
+
 // Shape the model is constrained to (structured outputs).
 export interface ModelOutput {
   message: string;
   items: SuggestedItem[];
+  template?: TemplateMatch; // omitted when no template clearly fits (usual)
 }
 
 // Wire response added `remaining`.
