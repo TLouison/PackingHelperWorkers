@@ -38,6 +38,20 @@ Request (trip mode):
     "listNames": ["Default", "Beach"],
     "existingItems": ["Passport", "Swimsuit", "Laptop"],
     "otherPackersItems": ["Sunscreen"],
+    "pastTrips": [
+      {
+        "name": "Maui",
+        "destinationName": "Maui, HI",
+        "month": "2025-07",
+        "durationDays": 7,
+        "tripType": "plane",
+        "accommodation": "rental",
+        "lists": [
+          { "name": "Snacks", "kind": "packing", "items": ["Trail mix", "Dried mango"] },
+          { "name": "Beach", "kind": "packing", "fromTemplate": "Beach", "items": ["Snorkel"] }
+        ]
+      }
+    ],
     "weather": {
       "currentTempC": 26,
       "daily": [
@@ -53,7 +67,11 @@ Request (trip mode):
 
 `mode` defaults to `"trip"` when omitted (older clients). `existingItems` is the
 asking packer's items plus unassigned ones, packed or not; `otherPackersItems`,
-`tripName`, `destinationLatitude`, `originName`, and `listNames` are optional.
+`pastTrips`, `tripName`, `destinationLatitude`, `originName`, and `listNames` are
+optional. `pastTrips` is the packer's most similar other trips first (at most 6,
+80 items each), leaving out items already on the current trip; a list without
+`fromTemplate` was made on that trip. Template mode sends `pastTrips` too, with
+trips the template was applied to first.
 
 Request (template mode), for building a reusable template list with no trip:
 
@@ -66,7 +84,8 @@ Request (template mode), for building a reusable template list with no trip:
     "listKind": "packing",
     "isDayOf": false,
     "countAsDays": false,
-    "existingItems": ["Swimsuit"]
+    "existingItems": ["Swimsuit"],
+    "pastTrips": []
   },
   "messages": [
     { "role": "user", "content": "Suggest a starting set for Beach Weekend" }
@@ -85,6 +104,7 @@ Success `200`:
   "items": [
     { "name": "Swimsuit coverup", "category": "Clothing", "count": 2, "kind": "packing", "accessoryFor": "Swimsuit" },
     { "name": "Laptop charger", "category": "Electronics", "count": 1, "kind": "packing", "accessoryFor": "Laptop" },
+    { "name": "Trail mix", "category": "other", "count": 1, "kind": "packing", "fromTrip": "Maui" },
     { "name": "Reserve dinner spot", "category": "Task", "count": 1, "kind": "task" }
   ],
   "remaining": 42

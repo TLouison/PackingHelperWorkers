@@ -46,6 +46,7 @@ export interface TripContext {
   listNames?: string[];
   existingItems: string[]; // this packer's items + unassigned, packed or not
   otherPackersItems?: string[]; // what the trip's other packers are bringing
+  pastTrips?: PastTrip[]; // most similar other trips first
   weather?: WeatherContext; // omitted when unavailable (>5 days out, no data)
 }
 
@@ -56,6 +57,25 @@ export interface TemplateContext {
   isDayOf: boolean;
   countAsDays: boolean; // counts become the trip's length when applied
   existingItems: string[];
+  pastTrips?: PastTrip[]; // trips this template was used on first, then recent
+}
+
+// What the packer brought on another trip, minus items already on the current one.
+export interface PastTrip {
+  name: string;
+  destinationName: string;
+  month: string; // yyyy-MM
+  durationDays: number;
+  tripType: string;
+  accommodation: string;
+  lists: PastTripList[];
+}
+
+export interface PastTripList {
+  name: string;
+  kind: "packing" | "tasks";
+  fromTemplate?: string; // omitted for lists made on that trip
+  items: string[];
 }
 
 export type AssistantMode = "trip" | "template";
@@ -79,6 +99,7 @@ export interface SuggestedItem {
   count: number;
   kind: SuggestionKind;
   accessoryFor?: string;
+  fromTrip?: string; // past trip name when suggested from one
 }
 
 // Shape the model is constrained to (structured outputs).

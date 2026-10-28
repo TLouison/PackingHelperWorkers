@@ -1,4 +1,4 @@
-import type { AssistantRequest, TemplateContext, TripContext } from "./types";
+import type { AssistantRequest, PastTrip, TemplateContext, TripContext } from "./types";
 
 // Cap the item lists so a huge trip can't blow up the prompt.
 const MAX_EXISTING_ITEMS = 200;
@@ -28,6 +28,7 @@ Use every trip detail:
 - The trip name and list names hint at the purpose (a wedding, a ski trip, a conference); plan for it.
 - Scale "count" to trip duration (clothing) and number of packers. Use 1 for shared/single items.
 - Other packers on the trip: shared items they're already bringing (sunscreen, adapters, first aid) are covered; personal items (toothbrush, clothes) are not.
+- Past trips (most similar first) show what this person actually brings. When a past trip is like this one (same kind of place, season, purpose, or transport), suggest the specific things they brought then, using their exact item names: their snacks, their gear, the lists they made themselves. Lists made on a trip (no template) are the strongest signal of personal habits. Items that show up on several past trips are safe bets. Skip items that only made sense for that trip (tickets, gifts for a specific event, a wedding outfit) and anything from a dissimilar trip. Set "fromTrip" to the past trip's name for these, and mention the trip in "message" when it helps ("Like your Maui trip, ...").
 
 ${ITEM_RULES}`;
 
@@ -39,6 +40,7 @@ Help them get a strong starting point:
 - Group naturally: cover the main areas the list is for, but don't pad it. Usually 8-15 items for a first pass on an empty list, fewer when filling gaps.
 - Use counts for one typical trip of this kind (often 1). If counts are set from trip length, use 1 for everything.
 - Match the list kind: a tasks list gets only tasks ("kind": "task"), a packing list gets only things to pack ("kind": "packing").
+- Past trips show what this person actually brings. Items they added on trips this template was used on (lists with this template's name, or lists they made themselves on similar trips) are strong candidates: things they keep adding by hand belong in the template. Prefer items that appear on more than one trip, use their exact names, and set "fromTrip" to a trip's name for these.
 
 ${ITEM_RULES}`;
 
@@ -60,6 +62,20 @@ function timeOfYear(ctx: TripContext): string {
   if (typeof lat !== "number") return months;
   if (Math.abs(lat) < 23.5) return `${months} (tropical latitude)`;
   return `${months} (${lat > 0 ? "Northern" : "Southern"} Hemisphere)`;
+}
+
+function pastTripsBlock(trips: PastTrip[] | undefined): string | null {
+  if (!trips || trips.length === 0) return null;
+  const blocks = trips.map((t) => {
+    const header = `* ${t.name || "Trip"}: ${t.destinationName || "unknown destination"}, ${t.month}, ${t.durationDays} day(s), by ${t.tripType || "unspecified"}, staying in ${t.accommodation || "unspecified"}`;
+    const lists = t.lists.map((l) => {
+      const source = l.fromTemplate ? `from template "${l.fromTemplate}"` : "made on this trip";
+      const kind = l.kind === "tasks" ? ", tasks" : "";
+      return `    - ${l.name} (${source}${kind}): ${l.items.join(", ")}`;
+    });
+    return [header, ...lists].join("\n");
+  });
+  return `Past trips (items already on the current list are left out):\n${blocks.join("\n")}`;
 }
 
 function weatherBlock(ctx: TripContext): string {
@@ -89,6 +105,7 @@ function tripPrompt(ctx: TripContext): string {
     ctx.otherPackersItems && ctx.otherPackersItems.length > 0
       ? `Other packers are bringing: ${itemList(ctx.otherPackersItems, "")}`
       : null,
+    pastTripsBlock(ctx.pastTrips),
   ];
   return `${TRIP_INSTRUCTIONS}
 
@@ -105,6 +122,7 @@ function templatePrompt(ctx: TemplateContext): string {
     ctx.countAsDays ? "Counts are set from trip length when applied." : null,
     "",
     `Already on the template (do NOT re-suggest these): ${itemList(ctx.existingItems, "(empty)")}`,
+    pastTripsBlock(ctx.pastTrips),
   ];
   return `${TEMPLATE_INSTRUCTIONS}
 
@@ -118,7 +136,7 @@ export function buildSystemPrompt(req: AssistantRequest): string {
 
 // Structured-output schema. Constraints kept within what structured outputs
 // support: additionalProperties:false everywhere, enums, no min/max.
-// accessoryFor is optional (omitted from "required").
+// accessoryFor and fromTrip are optional (omitted from "required").
 export const SUGGESTION_SCHEMA = {
   type: "object",
   properties: {
@@ -136,6 +154,7 @@ export const SUGGESTION_SCHEMA = {
           count: { type: "integer" },
           kind: { type: "string", enum: ["packing", "task"] },
           accessoryFor: { type: "string" },
+          fromTrip: { type: "string" },
         },
         required: ["name", "category", "count", "kind"],
         additionalProperties: false,
