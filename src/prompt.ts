@@ -12,14 +12,15 @@ const ITEM_RULES = `Rules for items:
 - Assign each item a "category" that is EXACTLY one of: Clothing, Electronics, Toiletries, Task, other.
 - "kind" is "task" for things to DO (book transport, print documents, charge devices, refill prescriptions), otherwise "packing". Task items use category "Task".
 - Use short, plain item names the way someone would write them on a list ("Phone charger", not "A reliable phone charging cable").
-- NEVER suggest anything already on their list. Treat plurals, brand names, and close synonyms as the same item ("Phone charger" = "iPhone charger" = "Charging cable"; "Toothbrush" covers "Electric toothbrush"). If in doubt, leave it out.
+- NEVER suggest anything already on any of their lists. An item on one list covers every list: don't suggest it again for a different list (sunscreen on "Toiletries" means no sunscreen for "Beach"). Treat plurals, brand names, and close synonyms as the same item ("Phone charger" = "iPhone charger" = "Charging cable"; "Toothbrush" covers "Electric toothbrush"). If in doubt, leave it out.
 - Only suggest items you are highly confident this person will actually use. A short list of sure things beats a long list of maybes; usually 3-10 items, fewer is fine, and an empty list is fine when they're covered.
-- Companions: look at what's already on their list and fill obvious gaps, the piece that item needs to be useful (toothbrush -> toothpaste; laptop -> laptop charger; camera -> spare battery or memory card; contact lenses -> lens solution and case; swimsuit -> sunscreen). Set "accessoryFor" to the existing item's name. Skip the companion if anything on the list already covers it.
-- Keep "message" brief (1-3 sentences), friendly, and specific to them. For pure advice with nothing to add, return an empty "items" array.`;
+- Companions: look at what's already on their list and fill obvious gaps, the piece that item needs to be useful (toothbrush -> toothpaste; laptop -> laptop charger; camera -> spare battery or memory card; contact lenses -> lens solution and case; swimsuit -> sunscreen). Set "accessoryFor" to the existing item's name. Skip the companion if anything on any list already covers it.
+- Keep "message" brief (1-3 sentences), friendly, and specific to them. For pure advice with nothing to add, return an empty "items" array.
+- Items are only suggestions: nothing is added until the user picks it. Never say or imply you added, packed, or put anything on their list ("I've added", "I put", "Added"). Phrase them as suggestions ("You might want", "Consider", "Here are a few ideas").`;
 
 const TRIP_INSTRUCTIONS = `You are an expert travel packing assistant embedded in a trip-packing app. You help the user decide what to pack and what to do before a trip, grounded in the trip details below.
 
-Respond with a short, practical "message" plus a list of concrete suggested "items".
+Respond with a short, practical "message" plus a list of concrete suggested "items" for the user to choose from.
 
 Use every trip detail:
 - Destination and time of year: infer the likely climate and season (hemisphere matters; tropical places have wet and dry seasons). Use the forecast when provided.
@@ -101,7 +102,7 @@ function tripPrompt(ctx: TripContext): string {
     ctx.listNames && ctx.listNames.length > 0 ? `Their lists: ${ctx.listNames.join(", ")}` : null,
     weatherBlock(ctx),
     "",
-    `Already on their list, packed or not (do NOT re-suggest these): ${itemList(ctx.existingItems, "(nothing yet)")}`,
+    `Already on their lists, across every list on this trip, packed or not (do NOT re-suggest these for any list): ${itemList(ctx.existingItems, "(nothing yet)")}`,
     ctx.otherPackersItems && ctx.otherPackersItems.length > 0
       ? `Other packers are bringing: ${itemList(ctx.otherPackersItems, "")}`
       : null,
