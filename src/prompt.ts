@@ -54,8 +54,8 @@ function timeOfYear(ctx: TripContext): string {
   const start = new Date(`${ctx.startDate}T00:00:00Z`);
   const end = new Date(`${ctx.endDate}T00:00:00Z`);
   if (Number.isNaN(start.getTime())) return "unknown";
-  const startMonth = MONTHS[start.getUTCMonth()];
-  const endMonth = Number.isNaN(end.getTime()) ? startMonth : MONTHS[end.getUTCMonth()];
+  const startMonth = MONTHS[start.getUTCMonth()] ?? "unknown";
+  const endMonth = Number.isNaN(end.getTime()) ? startMonth : (MONTHS[end.getUTCMonth()] ?? startMonth);
   const months = startMonth === endMonth ? startMonth : `${startMonth} to ${endMonth}`;
 
   const lat = ctx.destinationLatitude;
