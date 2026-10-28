@@ -35,8 +35,11 @@ Request (trip mode):
     "tripType": "plane",
     "accommodation": "hotel",
     "packerCount": 2,
-    "listNames": ["Default", "Beach"],
-    "existingItems": ["Passport", "Swimsuit", "Laptop"],
+    "lists": [
+      { "id": "L1", "name": "Default", "kind": "packing", "isDayOf": false, "isDefault": true, "items": ["Passport", "Laptop"] },
+      { "id": "L2", "name": "Beach", "kind": "packing", "isDayOf": false, "isDefault": false, "fromTemplate": "Beach Weekend", "items": ["Swimsuit"] },
+      { "id": "L3", "name": "Before We Go", "kind": "tasks", "isDayOf": true, "isDefault": false, "items": [] }
+    ],
     "otherPackersItems": ["Sunscreen"],
     "pastTrips": [
       {
@@ -65,13 +68,19 @@ Request (trip mode):
 }
 ```
 
-`mode` defaults to `"trip"` when omitted (older clients). `existingItems` is the
-asking packer's items plus unassigned ones, packed or not; `otherPackersItems`,
-`pastTrips`, `tripName`, `destinationLatitude`, `originName`, and `listNames` are
-optional. `pastTrips` is the packer's most similar other trips first (at most 6,
-80 items each), leaving out items already on the current trip; a list without
-`fromTemplate` was made on that trip. Template mode sends `pastTrips` too, with
-trips the template was applied to first.
+`mode` defaults to `"trip"` when omitted (older clients). `lists` is every list on
+the trip in the app's order, including empty ones; each list's `items` are the asking
+packer's items plus unassigned ones on it, packed or not. `id` is a short
+per-request id (`L1`, `L2`, …) rather than the list's UUID, because the model writes
+it back once per suggestion; the app maps it back to the list.
+Older clients send flat `listNames` + `existingItems` instead, which still work.
+`otherPackersItems`, `pastTrips`, `tripName`, `destinationLatitude`, and `originName`
+are optional. `pastTrips` is the packer's most similar other trips first (at most 3,
+80 items each, only trips that are actually alike), leaving out items that were on
+the current trip when the chat started; a list without `fromTemplate` was made on
+that trip. The app keeps `pastTrips` fixed for a chat session so the cached prompt
+prefix holds (see Design notes). Template mode sends `pastTrips` too, with trips the
+template was applied to first.
 
 Request (template mode), for building a reusable template list with no trip:
 
@@ -102,14 +111,20 @@ Success `200`:
 {
   "message": "For a Lisbon beach trip you're in good shape...",
   "items": [
-    { "name": "Swimsuit coverup", "category": "Clothing", "count": 2, "kind": "packing", "accessoryFor": "Swimsuit" },
-    { "name": "Laptop charger", "category": "Electronics", "count": 1, "kind": "packing", "accessoryFor": "Laptop" },
-    { "name": "Trail mix", "category": "other", "count": 1, "kind": "packing", "fromTrip": "Maui" },
+    { "name": "Swimsuit coverup", "category": "Clothing", "count": 2, "kind": "packing", "accessoryFor": "Swimsuit", "listId": "L2" },
+    { "name": "Laptop charger", "category": "Electronics", "count": 1, "kind": "packing", "accessoryFor": "Laptop", "listId": "L1" },
+    { "name": "Trail mix", "category": "other", "count": 1, "kind": "packing", "fromTrip": "Maui", "listId": "L1" },
     { "name": "Reserve dinner spot", "category": "Task", "count": 1, "kind": "task" }
   ],
   "remaining": 42
 }
 ```
+
+`listId` (trip mode, optional) is the list the model picked for the item. The model
+leaves it out when no list fits. The app ignores it when it's unknown or the list is
+the wrong kind, and falls back to the default list (packing) or its first everyday
+tasks list (tasks), creating that list when the trip doesn't have one. It never falls
+back to some other list.
 
 Also sets header `X-Messages-Remaining` (body is authoritative).
 
@@ -268,6 +283,7 @@ the iOS repo.
 ## Design notes
 
 - Raw `fetch` to the Anthropic API (no SDK) → zero runtime deps, no SDK-version coupling on Workers.
+- Prompt caching (`src/anthropic.ts`): the system prompt is two cached blocks, the mode's instructions (identical for every user) then the trip/template context (trip facts, weather, past trips; fixed for a chat session). The latest user turn carries a third breakpoint, so each send reads the earlier history from cache. What's on their lists right now (`lists`, `otherPackersItems`) changes whenever they add an item, so it goes last as a mid-conversation `role: "system"` message and never invalidates the cache. Each call logs `usage mode=… in=… cacheRead=… cacheWrite=… out=…`; after the first send in a chat, `cacheRead` should be most of the input.
 - Metering key is `usage:{rcAppUserId}:{YYYY-MM}` (UTC). The month in the key *is* the reset — no cron. Keys self-expire after ~62 days.
 - KV is eventually consistent, so the cap is soft (concurrent requests can overshoot slightly). Fine for a product cap, not billing.
 - Model ID lives in `wrangler.toml [vars]` — the future per-user "intelligence add-on" resolves the model before `callAnthropic`.

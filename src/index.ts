@@ -87,13 +87,24 @@ function validate(body: unknown): AssistantRequest | null {
     };
   }
   const t = b.tripContext as Record<string, unknown>;
-  if (!Array.isArray(t.existingItems)) return null;
+  if (Array.isArray(t.lists)) {
+    if (!t.lists.every(isTripList)) return null;
+  } else if (!Array.isArray(t.existingItems)) {
+    return null;
+  }
   return {
     rcAppUserId: b.rcAppUserId,
     mode: "trip",
     tripContext: b.tripContext as TripContext,
     messages,
   };
+}
+
+function isTripList(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const l = value as Record<string, unknown>;
+  return typeof l.id === "string" && typeof l.name === "string" && Array.isArray(l.items)
+    && l.items.every((item) => typeof item === "string");
 }
 
 function validatePhotoSearch(body: unknown): PhotoSearchRequest | null {

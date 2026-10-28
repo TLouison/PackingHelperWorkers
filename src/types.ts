@@ -44,11 +44,24 @@ export interface TripContext {
   tripType: string; // comma-separated: plane, car, train, boat, ferry
   accommodation: string; // comma-separated: hotel, rental, with family, with friends
   packerCount: number;
+  lists?: TripList[]; // every list on the trip, in the app's order
+  // Older clients: flat names instead of `lists`. Remove once the app ships with `lists`.
   listNames?: string[];
-  existingItems: string[]; // this packer's items + unassigned, packed or not
+  existingItems?: string[]; // this packer's items + unassigned, packed or not
   otherPackersItems?: string[]; // what the trip's other packers are bringing
   pastTrips?: PastTrip[]; // most similar other trips first
   weather?: WeatherContext; // omitted when unavailable (>5 days out, no data)
+}
+
+// A list on the trip. Suggestions name the list they go on by `id`.
+export interface TripList {
+  id: string; // short per-request id ("L1", "L2", …); the app maps it back to the list
+  name: string;
+  kind: "packing" | "tasks";
+  isDayOf: boolean; // for the day they leave
+  isDefault: boolean;
+  fromTemplate?: string; // omitted for lists made on this trip
+  items: string[]; // this packer's items + unassigned on this list, packed or not
 }
 
 // A reusable template list, not tied to a trip.
@@ -101,6 +114,7 @@ export interface SuggestedItem {
   kind: SuggestionKind;
   accessoryFor?: string;
   fromTrip?: string; // past trip name when suggested from one
+  listId?: string; // trip mode: the TripList it goes on; the app checks it before use
 }
 
 // Shape the model is constrained to (structured outputs).
